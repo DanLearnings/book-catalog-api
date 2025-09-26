@@ -1,0 +1,65 @@
+# File: .github/workflows/ci-build-publish.yml
+
+# Nome da nossa pipeline, que aparecerá na aba "Actions" do GitHub
+name: CI - Build and Publish Docker Image
+
+# Define o gatilho (trigger) da pipeline
+on:
+  # Roda a pipeline toda vez que houver um push na branch 'main'
+  push:
+    branches: [ "main" ]
+  # Permite que a pipeline seja executada manualmente pela interface do GitHub
+  workflow_dispatch:
+
+# Define os trabalhos (jobs) que a pipeline irá executar
+jobs:
+  build-and-publish:
+    # O tipo de máquina virtual que o job irá rodar
+    runs-on: ubuntu-latest
+
+    # Permissões necessárias para o GITHUB_TOKEN automático
+    # 'contents: read' para poder clonar o repositório
+    # 'packages: write' para poder publicar a imagem no GHCR
+    permissions:
+      contents: read
+      packages: write
+
+    # Define os passos sequenciais do nosso job
+    steps:
+      # 1. Clona o código do repositório para a máquina virtual
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Configura o Java (necessário para o Maven construir o projeto)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # 3. Faz login no GitHub Container Registry (GHCR)
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          # O GITHUB_TOKEN é um token secreto gerado automaticamente pelo GitHub Actions
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 4. Extrai metadados (como tags) da imagem Docker
+      # Isso cria tags úteis automaticamente, como 'latest' e o número do commit
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+
+      # 5. Constrói a imagem Docker e a publica no GHCR
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # Usa as tags geradas no passo anterior
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
